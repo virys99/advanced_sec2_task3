@@ -1,0 +1,64 @@
+- name: Install flask app
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install pip and acl
+      ansible.builtin.package:
+        name:
+          - python3-pip
+          - acl
+        update_cache: true
+        state: present
+
+    - name: Add the user for app daemon
+      ansible.builtin.user:
+        name: flask_app
+        comment: "For flask app"
+        shell: /bin/bash
+
+    - name: Create a directory if it does not exist
+      ansible.builtin.file:
+        path: /opt/simple_app
+        state: directory
+        mode: '0744'
+        owner: flask_app
+        group: flask_app
+
+    - name: Copy file with owner and permissions
+      ansible.builtin.copy:
+        src: app.py
+        dest: /opt/simple_app/app.py
+        mode: '0744'
+        owner: flask_app
+        group: flask_app
+
+    - name: Copy file for systemd daemon
+      ansible.builtin.copy:
+        src: simple_app.service.j2
+        dest: /usr/lib/systemd/system/simple_app.service
+
+- name: Install flask with pip
+  hosts: all
+  become: yes
+  tasks:
+    - name: Create venv and install flask
+      become_user: flask_app
+      shell: |
+        python3 -m venv /home/flask_app/.venv
+        source /home/flask_app/.venv/bin/activate
+        pip install flask
+      args:
+        executable: /bin/bash
+
+- name: Activate app service
+  hosts: all
+  become: yes
+  tasks:
+    - name: Reload systemd daemon
+      ansible.builtin.command: systemctl daemon-reload
+
+    - name: Start and enable simple_app service
+      service:
+        name: simple_app
+        state: started
+        enabled: yes
